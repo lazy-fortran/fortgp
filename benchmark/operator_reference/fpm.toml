@@ -1,0 +1,9 @@
+name = "fortgp-operator-reference"
+version = "0.1.0"
+license = "MIT"
+[dependencies]
+fortgp = { path = "../.." }
+[[executable]]
+name = "operator_reference"
+source-dir = "."
+main = "operator_reference.f90"

@@ -6,7 +6,8 @@ program generate
     use fortsym_diff, only: diff
     use fortsym_engine, only: engine_result_t
     use fortsym_engine_native, only: make_native_engine, native_engine_t
-    use fortsym_kernel_emit, only: kernel_emit_spec_t, emit_fortran_kernel_ir
+    use fortsym_kernel_emit, only: kernel_emit_spec_t, emit_fortran_kernel_ir, &
+        emit_cuda_device_ir
     use fortsym_kernel_ir, only: kernel_ir_t, lower_kernel_ir
     use fortsym_string, only: chars, str, str_t
     implicit none
@@ -58,6 +59,12 @@ program generate
         source = emit_fortran_kernel_ir(ir, spec, ok, message)
         if (.not. ok) error stop message
         open (newunit=unit, file='../src/generated/'//chars(spec%name)//'.f90', &
+            status='replace', action='write')
+        write (unit, '(a)', advance='no') chars(source)
+        close (unit)
+        source = emit_cuda_device_ir(ir, spec, ok, message)
+        if (.not. ok) error stop message
+        open (newunit=unit, file='../cuda/generated/'//chars(spec%name)//'.cuh', &
             status='replace', action='write')
         write (unit, '(a)', advance='no') chars(source)
         close (unit)
