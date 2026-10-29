@@ -283,9 +283,18 @@ contains
         call rbf_covariance(query, self%x, self%amplitude, self%length, cross, status)
         if (.not. status_ok(status)) return
         y_gradient = matmul(transpose(cross), mean_weight)
+        if (.not. all(ieee_is_finite(y_gradient))) then
+            deallocate(y_gradient)
+            call invalid(status, 'observation transpose product overflow')
+            return
+        end if
         call factor%factorize(self%covariance, status)
         if (.not. status_ok(status)) return
         call factor%solve(y_gradient, status)
+        if (.not. all(ieee_is_finite(y_gradient))) then
+            deallocate(y_gradient)
+            call invalid(status, 'observation transpose solve overflow')
+        end if
     end subroutine predict_y_vjp
 
     subroutine log_marginal_likelihood(self, value, status)

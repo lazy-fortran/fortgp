@@ -193,7 +193,8 @@ contains
         type(exact_gp_t) :: gp
         type(fortnum_status_t) :: s
         real(dp) :: x(1, 2), noise(2, 2), nan, zx(1,2), ynan(2), qnan(1,1)
-        real(dp), allocatable :: mean(:), cov(:, :)
+        real(dp), allocatable :: mean(:), cov(:, :), gradient(:)
+        real(dp) :: weights(2)
         nan = ieee_value(0.0_dp, ieee_quiet_nan)
         x(1, :) = [0.0_dp, 1.0_dp]
         noise = reshape([0.2_dp, 0.0_dp, 0.0_dp, 0.2_dp], [2, 2])
@@ -226,6 +227,9 @@ contains
         call check(error,.not. status_ok(s)); if (allocated(error)) return
         call gp%predict(x, mean, cov, s, &
             future_noise_cov=reshape([0.2_dp, 0.3_dp, 0.3_dp, 0.2_dp], [2, 2]))
+        call check(error,.not. status_ok(s)); if (allocated(error)) return
+        weights = huge(1.0_dp)
+        call gp%predict_y_vjp(x, weights, gradient, s)
         call check(error,.not. status_ok(s))
     end subroutine invalid
 end module exact_tests
