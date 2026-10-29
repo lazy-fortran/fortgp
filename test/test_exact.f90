@@ -8,13 +8,14 @@ module exact_tests
 contains
     subroutine collect(tests)
         type(unittest_type), allocatable, intent(out) :: tests(:)
-        tests = [new_unittest('scalar-joint-latent-and-observation', scalar), &
-            new_unittest('correlated-noise-known-answer', correlated), &
-            new_unittest('anisotropic-kernel', anisotropic), &
-            new_unittest('posterior-and-likelihood-jvp', derivatives), &
-            new_unittest('observation-vjp', observation_vjp), &
-            new_unittest('noiseless-interpolation', noiseless), &
-            new_unittest('invalid-inputs-and-failed-refit', invalid)]
+        allocate(tests(7))
+        tests(1) = new_unittest('scalar-joint-latent-and-observation', scalar)
+        tests(2) = new_unittest('correlated-noise-known-answer', correlated)
+        tests(3) = new_unittest('anisotropic-kernel', anisotropic)
+        tests(4) = new_unittest('posterior-and-likelihood-jvp', derivatives)
+        tests(5) = new_unittest('observation-vjp', observation_vjp)
+        tests(6) = new_unittest('noiseless-interpolation', noiseless)
+        tests(7) = new_unittest('invalid-inputs-and-failed-refit', invalid)
     end subroutine collect
 
     subroutine scalar(error)
@@ -46,6 +47,7 @@ contains
         type(fortnum_status_t) :: s
         real(dp) :: x(1, 2), noise(2, 2), kernel(2, 2), inverse(2, 2), y(2), det, value
         real(dp), allocatable :: mean(:), latent(:, :)
+        real(dp) :: alpha(2), solved(2,2), expected_mean(2), expected_cov(2,2)
         x(1, :) = [0.0_dp, sqrt(2*log(2.0_dp))]
         noise = reshape([0.25_dp, 0.1_dp, 0.1_dp, 0.25_dp], [2, 2])
         kernel = reshape([1.0_dp, 0.5_dp, 0.5_dp, 1.0_dp], [2, 2])
@@ -56,15 +58,19 @@ contains
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
         call gp%predict(x, mean, latent, s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
-        call check(error, maxval(abs(mean - matmul(kernel, matmul(inverse, y)))) < 2e-14_dp)
+        alpha = matmul(inverse, y)
+        solved = matmul(inverse, kernel)
+        expected_mean = matmul(kernel, alpha)
+        expected_cov = matmul(kernel, solved)
+        expected_cov = kernel - expected_cov
+        call check(error, maxval(abs(mean - expected_mean)) < 2e-14_dp)
         if (allocated(error)) return
-        call check(error, maxval(abs(latent - kernel + &
-            matmul(kernel, matmul(inverse, kernel)))) < 2e-14_dp)
+        call check(error, maxval(abs(latent - expected_cov)) < 2e-14_dp)
         if (allocated(error)) return
         call gp%log_marginal_likelihood(value, s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
         call check(error, abs(value + log(2*acos(-1.0_dp)) + 0.5_dp*log(det) + &
-            0.5_dp*dot_product(y, matmul(inverse, y))) < 2e-14_dp)
+            0.5_dp*dot_product(y, alpha)) < 2e-14_dp)
     end subroutine correlated
 
     subroutine anisotropic(error)
@@ -97,6 +103,7 @@ contains
         real(dp) :: x(2, 3), dx(2, 3), query(2, 2), dquery(2, 2), y(3), dy(3)
         real(dp) :: noise(3, 3), dn(3, 3), length(2), dl(2), a, da
         real(dp) :: vp, vm, dv
+        real(dp) :: xp(2,3), yp(3), np(3,3), lp(2), qp(2,2)
         real(dp), parameter :: h = 2e-5_dp
         real(dp), allocatable :: dm(:), dc(:, :), mp(:), mm(:), cp(:, :), cm(:, :)
         x = reshape([0.1_dp, 0.2_dp, 0.5_dp, 0.7_dp, 1.2_dp, -0.3_dp], [2, 3])
@@ -116,13 +123,17 @@ contains
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
         call gp%log_marginal_likelihood_jvp(dx, dy, dn, da, dl, dv, s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
-        call plus%fit(x + h*dx, y + h*dy, noise + h*dn, a + h*da, length + h*dl, s)
+        xp = x + h*dx; yp = y + h*dy; np = noise + h*dn; lp = length + h*dl
+        call plus%fit(xp, yp, np, a + h*da, lp, s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
-        call minus%fit(x - h*dx, y - h*dy, noise - h*dn, a - h*da, length - h*dl, s)
+        xp = x - h*dx; yp = y - h*dy; np = noise - h*dn; lp = length - h*dl
+        call minus%fit(xp, yp, np, a - h*da, lp, s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
-        call plus%predict(query + h*dquery, mp, cp, s)
+        qp = query + h*dquery
+        call plus%predict(qp, mp, cp, s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
-        call minus%predict(query - h*dquery, mm, cm, s)
+        qp = query - h*dquery
+        call minus%predict(qp, mm, cm, s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
         call plus%log_marginal_likelihood(vp, s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
@@ -141,6 +152,7 @@ contains
         type(fortnum_status_t) :: s
         real(dp) :: x(1, 2), query(1, 3), noise(2, 2), dy(2), weights(3)
         real(dp), allocatable :: gradient(:), dm(:), dc(:, :)
+        real(dp) :: zx(1,2), zq(1,3), zn(2,2)
         x(1, :) = [0.0_dp, 1.0_dp]; query(1, :) = [-0.2_dp, 0.4_dp, 1.2_dp]
         noise = reshape([0.2_dp, 0.04_dp, 0.04_dp, 0.3_dp], [2, 2])
         dy = [0.4_dp, -0.3_dp]; weights = [-0.2_dp, 0.5_dp, 0.8_dp]
@@ -148,7 +160,8 @@ contains
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
         call gp%predict_y_vjp(query, weights, gradient, s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
-        call gp%predict_jvp(query, 0*query, 0*x, dy, 0*noise, 0.0_dp, [0.0_dp], dm, dc, s)
+        zx = 0.0_dp; zq = 0.0_dp; zn = 0.0_dp
+        call gp%predict_jvp(query, zq, zx, dy, zn, 0.0_dp, [0.0_dp], dm, dc, s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
         call check(error, abs(dot_product(weights, dm) - dot_product(gradient, dy)) < 1e-14_dp)
         if (allocated(error)) return
@@ -179,7 +192,7 @@ contains
         type(error_type), allocatable, intent(out) :: error
         type(exact_gp_t) :: gp
         type(fortnum_status_t) :: s
-        real(dp) :: x(1, 2), noise(2, 2), nan
+        real(dp) :: x(1, 2), noise(2, 2), nan, zx(1,2), ynan(2), qnan(1,1)
         real(dp), allocatable :: mean(:), cov(:, :)
         nan = ieee_value(0.0_dp, ieee_quiet_nan)
         x(1, :) = [0.0_dp, 1.0_dp]
@@ -197,15 +210,19 @@ contains
         call gp%fit(x, [0.1_dp, 0.3_dp], noise, 1.0_dp, [0.7_dp], s)
         call check(error,.not. status_ok(s)); if (allocated(error)) return
         noise = 0.0_dp
-        call gp%fit(0*x, [0.1_dp, 0.3_dp], noise, 1.0_dp, [0.7_dp], s)
+        zx = 0.0_dp
+        call gp%fit(zx, [0.1_dp, 0.3_dp], noise, 1.0_dp, [0.7_dp], s)
         call check(error,.not. status_ok(s)); if (allocated(error)) return
         call gp%fit(x, [0.1_dp, 0.3_dp], noise, 1.0_dp, [0.0_dp], s)
         call check(error,.not. status_ok(s)); if (allocated(error)) return
-        call gp%fit(x, [0.1_dp, nan], noise, 1.0_dp, [0.7_dp], s)
+        ynan(1) = 0.1_dp
+        ynan(2) = nan
+        call gp%fit(x, ynan, noise, 1.0_dp, [0.7_dp], s)
         call check(error,.not. status_ok(s)); if (allocated(error)) return
         call gp%fit(x, [0.1_dp, 0.3_dp], noise, 1.0_dp, [0.7_dp], s)
         call check(error, status_ok(s), s%msg); if (allocated(error)) return
-        call gp%predict(reshape([nan], [1, 1]), mean, cov, s)
+        qnan = nan
+        call gp%predict(qnan, mean, cov, s)
         call check(error,.not. status_ok(s)); if (allocated(error)) return
         call gp%predict(x, mean, cov, s, &
             future_noise_cov=reshape([0.2_dp, 0.3_dp, 0.3_dp, 0.2_dp], [2, 2]))
