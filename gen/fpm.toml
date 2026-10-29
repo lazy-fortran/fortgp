@@ -1,0 +1,8 @@
+name = "fortgp-generate"
+version = "0.1.0"
+[dependencies]
+fortsym = { git = "https://github.com/lazy-fortran/fortsym.git", rev = "45ea8959002eedc8a85bb2dc386af293bb66a761" }
+[[executable]]
+name = "generate"
+source-dir = "."
+main = "generate.f90"

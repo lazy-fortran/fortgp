@@ -1,0 +1,14 @@
+name = "fortgp"
+version = "0.1.0"
+description = "Exact scalar Gaussian-process regression with joint uncertainty"
+author = "Christopher Albert"
+license = "MIT"
+[dependencies]
+fortprob = { git = "https://github.com/lazy-fortran/fortprob.git", rev = "e1e67e5a02fd0a58111290fc2e871c67fc8c44a9" }
+openmp = "*"
+[fortran]
+implicit-typing = false
+source-form = "free"
+
+[dev-dependencies]
+test-drive = { git = "https://github.com/fortran-lang/test-drive.git", rev = "791484a79a24cbc00be6f74e53c6e030cb75efe2" }
