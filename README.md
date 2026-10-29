@@ -1,6 +1,6 @@
 # fortgp
 
-[fortgp](https://github.com/lazy-fortran/fortgp) provides exact, zero-mean scalar
+[fortgp](https://github.com/lazy-fortran/fortgp) is an initial implementation of exact, zero-mean scalar
 Gaussian-process regression in Fortran. Training and query inputs have shape
 `(ndim,npoints)`. The squared-exponential covariance has amplitude measured as a
 standard deviation and one positive length per input dimension, in that
@@ -53,8 +53,9 @@ returns a directional derivative of the posterior mean and covariance. Here
 the corresponding fitted quantities. Directions have the same shapes as their
 primal values; the noise direction is symmetric and may be indefinite.
 `log_marginal_likelihood_jvp(dx,dy,dnoise,damplitude,dlength,dvalue,status)`
-supports the same training directions. These products differentiate the
-conditional, fixed-hyperparameter calculation, including the linear solves.
+supports the same training directions. These products differentiate the conditional calculation at supplied
+hyperparameters, including specified amplitude and length perturbations and
+the linear solves.
 They do not differentiate a fitted hyperparameter optimum.
 
 `predict_y_vjp(query,mean_weight,y_gradient,status)` returns the transpose

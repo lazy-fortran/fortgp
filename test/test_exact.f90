@@ -13,6 +13,7 @@ contains
             new_unittest('anisotropic-kernel', anisotropic), &
             new_unittest('posterior-and-likelihood-jvp', derivatives), &
             new_unittest('observation-vjp', observation_vjp), &
+            new_unittest('noiseless-interpolation', noiseless), &
             new_unittest('invalid-inputs-and-failed-refit', invalid)]
     end subroutine collect
 
@@ -153,6 +154,26 @@ contains
         if (allocated(error)) return
         call check(error, maxval(abs(dc)) < 1e-14_dp)
     end subroutine observation_vjp
+
+    subroutine noiseless(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(exact_gp_t) :: gp
+        type(fortnum_status_t) :: status
+        real(dp) :: x(2, 3), y(3), noise(3, 3)
+        real(dp), allocatable :: mean(:), covariance(:, :)
+        x = reshape([0.1_dp, 0.2_dp, 0.5_dp, 0.7_dp, 1.2_dp, -0.3_dp], [2, 3])
+        y = [0.2_dp, 0.8_dp, -0.3_dp]
+        noise = 0.0_dp
+        call gp%fit(x, y, noise, 1.2_dp, [0.7_dp, 1.3_dp], status)
+        call check(error, status_ok(status), status%msg)
+        if (allocated(error)) return
+        call gp%predict(x, mean, covariance, status)
+        call check(error, status_ok(status), status%msg)
+        if (allocated(error)) return
+        call check(error, maxval(abs(mean - y)) < 2e-14_dp)
+        if (allocated(error)) return
+        call check(error, maxval(abs(covariance)) < 2e-14_dp)
+    end subroutine noiseless
 
     subroutine invalid(error)
         type(error_type), allocatable, intent(out) :: error
