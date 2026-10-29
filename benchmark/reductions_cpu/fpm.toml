@@ -1,0 +1,9 @@
+name = "fortgp-reductions-benchmark"
+version = "0.1.0"
+license = "MIT"
+[dependencies]
+fortgp = { path = "../.." }
+[[executable]]
+name = "reductions"
+source-dir = ".."
+main = "reductions.f90"

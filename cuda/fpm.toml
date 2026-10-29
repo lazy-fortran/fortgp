@@ -1,0 +1,12 @@
+name = "fortgp-cuda"
+version = "0.1.0"
+license = "MIT"
+[dependencies]
+fortgp = { path = ".." }
+[build]
+link = ["fortgp_cuda_backend", "cudart", "stdc++"]
+[fortran]
+implicit-typing = false
+source-form = "free"
+[dev-dependencies]
+test-drive = { git = "https://github.com/fortran-lang/test-drive.git", rev = "791484a79a24cbc00be6f74e53c6e030cb75efe2" }
