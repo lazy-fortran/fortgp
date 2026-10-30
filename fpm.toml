@@ -4,7 +4,7 @@ description = "Exact scalar Gaussian-process regression with joint uncertainty"
 author = "Christopher Albert"
 license = "MIT"
 [dependencies]
-fortprob = { git = "https://github.com/lazy-fortran/fortprob.git", rev = "de20fd2378031a75e93c6c81439807e4bde89392" }
+fortprob = { git = "https://github.com/lazy-fortran/fortprob.git", rev = "c57dfdd1a68b4bee6a9ba2136e1422ddbbc0fb8b" }
 openmp = "*"
 [fortran]
 implicit-typing = false
