@@ -4,7 +4,7 @@ module fortgp
     use fortnum_status, only: fortnum_status_t, status_set, status_ok, &
         FORTNUM_DOMAIN_ERROR, FORTNUM_OK
     use fortnum_cholesky, only: cholesky_factorization_t
-    use fortprob_gaussian, only: gaussian_condition, gaussian_condition_jvp, &
+    use fortprob_gaussian, only: gaussian_conditioner_t, gaussian_condition_jvp, &
         gaussian_logpdf, validate_covariance
     implicit none
     private
@@ -13,6 +13,7 @@ module fortgp
         private
         real(dp), allocatable :: x(:, :), y(:), length(:), covariance(:, :), zero(:)
         real(dp) :: amplitude = 0.0_dp
+        type(gaussian_conditioner_t), allocatable :: conditioner
         logical :: fitted = .false.
     contains
         procedure :: fit
@@ -137,10 +138,11 @@ contains
         class(exact_gp_t), intent(inout) :: self
         real(dp), intent(in) :: x(:, :), y(:), noise_cov(:, :), amplitude, length(:)
         type(fortnum_status_t), intent(out) :: status
-        type(cholesky_factorization_t) :: factor
-        real(dp), allocatable :: covariance(:, :)
+        type(gaussian_conditioner_t) :: conditioner
+        real(dp), allocatable :: covariance(:, :), zero(:)
         integer :: n
         self%fitted = .false.
+        if (allocated(self%conditioner)) deallocate(self%conditioner)
         if (.not. valid_inputs(x, amplitude, length, status)) return
         n = size(x, 2)
         call invalid(status, 'y or noise covariance shape differs from training data')
@@ -153,16 +155,16 @@ contains
         call rbf_covariance(x, x, amplitude, length, covariance, status)
         if (.not. status_ok(status)) return
         covariance = covariance + noise_cov
-        call validate_covariance(covariance, status, positive_definite=.true.)
-        if (.not. status_ok(status)) return
-        call factor%factorize(covariance, status)
+        allocate(zero(n), source=0.0_dp)
+        call conditioner%fit(zero, covariance, y, status)
         if (.not. status_ok(status)) return
         self%x = x
         self%y = y
-        self%zero = 0*y
+        call move_alloc(zero, self%zero)
         self%length = length
         self%amplitude = amplitude
         call move_alloc(covariance, self%covariance)
+        allocate(self%conditioner, source=conditioner)
         self%fitted = .true.
     end subroutine fit
 
@@ -199,9 +201,7 @@ contains
         call rbf_covariance(query, self%x, self%amplitude, self%length, cross, status)
         if (.not. status_ok(status)) return
         allocate(zero(m), source=0.0_dp)
-        call gaussian_condition(zero, prior, &
-            self%zero, self%covariance, cross, self%y, mean, &
-            latent_cov, status)
+        call self%conditioner%condition(zero, prior, cross, mean, latent_cov, status)
         if (.not. status_ok(status)) return
         if (present(observation_cov)) then
             observation_cov = latent_cov
