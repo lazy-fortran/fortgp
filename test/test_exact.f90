@@ -8,7 +8,7 @@ module exact_tests
 contains
     subroutine collect(tests)
         type(unittest_type), allocatable, intent(out) :: tests(:)
-        allocate(tests(7))
+        allocate(tests(8))
         tests(1) = new_unittest('scalar-joint-latent-and-observation', scalar)
         tests(2) = new_unittest('correlated-noise-known-answer', correlated)
         tests(3) = new_unittest('anisotropic-kernel', anisotropic)
@@ -16,6 +16,7 @@ contains
         tests(5) = new_unittest('observation-vjp', observation_vjp)
         tests(6) = new_unittest('noiseless-interpolation', noiseless)
         tests(7) = new_unittest('invalid-inputs-and-failed-refit', invalid)
+        tests(8) = new_unittest('prediction-after-changing-fit-size', refit)
     end subroutine collect
 
     subroutine scalar(error)
@@ -72,6 +73,31 @@ contains
         call check(error, abs(value + log(2*acos(-1.0_dp)) + 0.5_dp*log(det) + &
             0.5_dp*dot_product(y, alpha)) < 2e-14_dp)
     end subroutine correlated
+
+    subroutine refit(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(exact_gp_t) :: gp
+        type(fortnum_status_t) :: s
+        real(dp) :: x(1, 2), noise(2, 2)
+        real(dp), allocatable :: mean(:), latent(:, :), observed(:, :)
+        x(1, :) = [0.0_dp, 1.0_dp]
+        noise = reshape([0.2_dp, 0.04_dp, 0.04_dp, 0.3_dp], [2, 2])
+        call gp%fit(x, [0.3_dp, 0.8_dp], noise, 1.2_dp, [0.7_dp], s)
+        call check(error, status_ok(s), s%msg); if (allocated(error)) return
+        call gp%predict(x, mean, latent, s)
+        call check(error, status_ok(s), s%msg); if (allocated(error)) return
+        call gp%fit(reshape([0.0_dp], [1, 1]), [3.0_dp], &
+            reshape([1.0_dp], [1, 1]), 2.0_dp, [0.7_dp], s)
+        call check(error, status_ok(s), s%msg); if (allocated(error)) return
+        call gp%predict(reshape([0.0_dp], [1, 1]), mean, latent, s, &
+            reshape([0.4_dp], [1, 1]), observed)
+        call check(error, status_ok(s), s%msg); if (allocated(error)) return
+        call check(error, abs(mean(1) - 2.4_dp) < 1e-14_dp)
+        if (allocated(error)) return
+        call check(error, abs(latent(1, 1) - 0.8_dp) < 1e-14_dp)
+        if (allocated(error)) return
+        call check(error, abs(observed(1, 1) - 1.2_dp) < 1e-14_dp)
+    end subroutine refit
 
     subroutine anisotropic(error)
         type(error_type), allocatable, intent(out) :: error
