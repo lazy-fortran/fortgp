@@ -89,7 +89,7 @@ library directories, and run the generator from `gen/`. Regenerating must leave
 the checked-in sources unchanged. Generated derivatives have independent
 known-answer and finite-difference checks; generation itself is not a proof.
 
-## Finite-rank radial basis function basis
+## Finite-rank kernel basis
 
 `use fortgp_basis, only: rbf_basis_t` provides a Nyström feature map for a
 finite-rank Gaussian process (GP). It can be passed to Bayesian coefficient
@@ -104,6 +104,13 @@ call basis%evaluate(query, phi, status)
 call basis%evaluate_jvp(query, dquery, dphi, status)
 ```
 
+The default kernel is the squared exponential (`'rbf'`). Pass the optional
+`kernel='matern32'` or `kernel='matern52'` to `fit` for Matérn 3/2 or 5/2;
+`basis%kernel_name()` reports the fitted choice. The type name is retained for
+compatibility. The public `matern32_covariance` and `matern52_covariance`, and
+their `_jvp` counterparts, have the same arguments as the RBF covariance
+routines. The existing `exact_gp_t` continues to use the RBF kernel.
+
 Check `status_ok(status)` after every call. Inputs have shape `(ndim,npoints)`;
 outputs have shape `(npoints,actual_rank)`. Fit uses inputs alone, with population
 means and standard deviations estimated only on its fitting inputs. Dimensions
@@ -113,9 +120,14 @@ then greedily the farthest point from the selected set; ties use the first input
 index. Duplicate centres are stopped, so actual rank can be below the requested
 positive count. Requests larger than the input count are allowed.
 
-The base covariance is `exp(-sum(delta**2)/(2*d_active*ell**2))`, where `delta`
+The RBF base covariance is `exp(-sum(delta**2)/(2*d_active*ell**2))`, where `delta`
 is the standardized input difference, `d_active` counts nonconstant dimensions
 (with a minimum of one), and `ell` is the positive `length_multiplier`.
+Writing `r=sqrt(sum(delta**2)/d_active)/ell`, the Matérn alternatives use
+`(1+sqrt(3)*r)*exp(-sqrt(3)*r)` and
+`(1+sqrt(5)*r+5*r**2/3)*exp(-sqrt(5)*r)`. Covariance amplitudes are one in
+the basis; coefficient priors set the model's output scale. Generated
+derivatives use finite limits at coincident inputs.
 Here `K_mm` is the centre covariance, `K_nm` is the query-to-centre
 covariance and `I` is the identity matrix. With the lower Cholesky factor `L`
 defined by `K_mm + jitter*I = L*transpose(L)`, features are
