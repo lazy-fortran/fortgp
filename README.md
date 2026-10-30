@@ -88,3 +88,54 @@ build the pinned FortSym revision with CMake and
 library directories, and run the generator from `gen/`. Regenerating must leave
 the checked-in sources unchanged. Generated derivatives have independent
 known-answer and finite-difference checks; generation itself is not a proof.
+
+## Finite-rank radial basis function basis
+
+`use fortgp_basis, only: rbf_basis_t` provides a Nyström feature map for a
+finite-rank Gaussian process (GP). It can be passed to Bayesian coefficient
+inference in FortProb. It does not implement a full GP or add a residual
+variance correction.
+
+```fortran
+type(rbf_basis_t) :: basis
+real(dp), allocatable :: phi(:,:), dphi(:,:)
+call basis%fit(x, ncentres=32, length_multiplier=1.0_dp, status=status)
+call basis%evaluate(query, phi, status)
+call basis%evaluate_jvp(query, dquery, dphi, status)
+```
+
+Check `status_ok(status)` after every call. Inputs have shape `(ndim,npoints)`;
+outputs have shape `(npoints,actual_rank)`. Fit uses inputs alone, with population
+means and standard deviations estimated only on its fitting inputs. Dimensions
+constant during fitting are ignored in fitting, query evaluation and query
+derivatives. Fit chooses the point closest to the standardized origin first,
+then greedily the farthest point from the selected set; ties use the first input
+index. Duplicate centres are stopped, so actual rank can be below the requested
+positive count. Requests larger than the input count are allowed.
+
+The base covariance is `exp(-sum(delta**2)/(2*d_active*ell**2))`, where `delta`
+is the standardized input difference, `d_active` counts nonconstant dimensions
+(with a minimum of one), and `ell` is the positive `length_multiplier`.
+Here `K_mm` is the centre covariance, `K_nm` is the query-to-centre
+covariance and `I` is the identity matrix. With the lower Cholesky factor `L`
+defined by `K_mm + jitter*I = L*transpose(L)`, features are
+`K_nm*inverse(transpose(L))`.
+`kernel_jitter` defaults to `1e-10` and may be set to another positive finite
+value before fitting. It is a declared numerical stabilization, not observation
+noise or a fitted statistical parameter. There is no adaptive jitter retry.
+
+The public `means`, `scales`, `active` and standardized `centres` record the
+fitted transform; treat these fields and `length_multiplier` as read-only after
+fit. `clear()` invalidates the fit. Any failed refit also invalidates it.
+`evaluate_jvp` is a Jacobian-vector product for query inputs with the fitted
+transform, centre selection and factor held fixed. It does not differentiate
+through fitting or discrete centre selection.
+
+Centre selection uses linear storage in the fitting count and `O(npoints *
+ncentres * ndim)` work; no fitting-count-squared covariance is formed. Evaluation
+uses rectangular kernel storage. Estimated workspace requests exceeding four GiB are
+rejected before allocation. The selection-distance and covariance kernels use
+OpenMP. Run the synthetic benchmark with
+`cd benchmark/basis && fpm run --profile release basis`, with the linear algebra
+library's thread count fixed to one, to compare one and four OpenMP threads
+and numerical agreement.
