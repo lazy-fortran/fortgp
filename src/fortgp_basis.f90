@@ -4,13 +4,16 @@ module fortgp_basis
     use fortnum_status, only: fortnum_status_t, status_set, status_ok, &
         FORTNUM_DOMAIN_ERROR, FORTNUM_OK
     use fortnum_cholesky, only: cholesky_factorization_t
-    use fortgp, only: rbf_covariance, rbf_covariance_jvp
+    use fortgp, only: rbf_covariance, rbf_covariance_jvp, &
+        matern32_covariance, matern32_covariance_jvp, &
+        matern52_covariance, matern52_covariance_jvp
     implicit none
     private
 
     type, public :: rbf_basis_t
         real(dp), allocatable :: means(:), scales(:), centres(:, :)
         logical, allocatable :: active(:)
+        character(8), private :: kernel = 'rbf'
         real(dp) :: kernel_jitter = 1.0e-10_dp
         real(dp) :: length_multiplier = 1.0_dp
         real(dp), allocatable, private :: lengths(:)
@@ -21,6 +24,7 @@ module fortgp_basis
         procedure :: evaluate => basis_evaluate
         procedure :: evaluate_jvp => basis_jvp
         procedure :: clear => basis_clear
+        procedure :: kernel_name
     end type
 contains
     subroutine invalid(status, message)
@@ -28,6 +32,51 @@ contains
         character(*), intent(in) :: message
         call status_set(status, FORTNUM_DOMAIN_ERROR, 'fortgp_basis: '//message)
     end subroutine
+
+    subroutine covariance(self, x, z, amplitude, length, value, status)
+        class(rbf_basis_t), intent(in) :: self
+        real(dp), intent(in) :: x(:, :), z(:, :), amplitude, length(:)
+        real(dp), allocatable, intent(out) :: value(:, :)
+        type(fortnum_status_t), intent(out) :: status
+        select case (self%kernel)
+        case ('rbf')
+            call rbf_covariance(x, z, amplitude, length, value, status)
+        case ('matern32')
+            call matern32_covariance(x, z, amplitude, length, value, status)
+        case ('matern52')
+            call matern52_covariance(x, z, amplitude, length, value, status)
+        case default
+            call invalid(status, 'invalid fitted kernel')
+        end select
+    end subroutine
+
+    subroutine covariance_jvp(self, x, z, amplitude, length, dx, dz, da, dl, &
+            value, status)
+        class(rbf_basis_t), intent(in) :: self
+        real(dp), intent(in) :: x(:, :), z(:, :), amplitude, length(:)
+        real(dp), intent(in) :: dx(:, :), dz(:, :), da, dl(:)
+        real(dp), allocatable, intent(out) :: value(:, :)
+        type(fortnum_status_t), intent(out) :: status
+        select case (self%kernel)
+        case ('rbf')
+            call rbf_covariance_jvp(x, z, amplitude, length, &
+                dx, dz, da, dl, value, status)
+        case ('matern32')
+            call matern32_covariance_jvp(x, z, amplitude, length, &
+                dx, dz, da, dl, value, status)
+        case ('matern52')
+            call matern52_covariance_jvp(x, z, amplitude, length, &
+                dx, dz, da, dl, value, status)
+        case default
+            call invalid(status, 'invalid fitted kernel')
+        end select
+    end subroutine
+
+    function kernel_name(self) result(name)
+        class(rbf_basis_t), intent(in) :: self
+        character(8) :: name
+        name = self%kernel
+    end function
 
     subroutine basis_clear(self)
         class(rbf_basis_t), intent(inout) :: self
@@ -40,15 +89,26 @@ contains
         if (allocated(self%factor%lower)) deallocate(self%factor%lower)
     end subroutine
 
-    subroutine basis_fit(self, x, ncentres, length_multiplier, status)
+    subroutine basis_fit(self, x, ncentres, length_multiplier, status, kernel)
         class(rbf_basis_t), intent(inout) :: self
         real(dp), intent(in) :: x(:, :), length_multiplier
+        character(*), optional, intent(in) :: kernel
         integer, intent(in) :: ncentres
         type(fortnum_status_t), intent(out) :: status
-        real(dp), allocatable :: z(:, :), selected(:, :), nearest(:), kernel(:, :)
+        real(dp), allocatable :: z(:, :), selected(:, :), nearest(:), matrix(:, :)
         real(dp) :: distance, spread
         integer :: n, d, i, j, index, rank, limit, nactive
         call self%clear()
+        self%kernel = 'rbf'
+        if (present(kernel)) then
+            call invalid(status, 'kernel must be rbf, matern32 or matern52')
+            select case (kernel)
+            case ('rbf', 'matern32', 'matern52')
+                self%kernel = kernel
+            case default
+                return
+            end select
+        end if
         call invalid(status, 'nonempty finite fitting inputs and positive rank required')
         n = size(x, 2)
         if (size(x, 1) < 1 .or. n < 1 .or. ncentres < 1) return
@@ -107,13 +167,13 @@ contains
             if (nearest(index) <= 0.0_dp) exit
         end do
         self%centres = selected(:, :rank)
-        call rbf_covariance(self%centres, self%centres, 1.0_dp, &
-            self%lengths, kernel, status)
+        call covariance(self, self%centres, self%centres, 1.0_dp, &
+            self%lengths, matrix, status)
         if (.not. status_ok(status)) return
         do i = 1, rank
-            kernel(i, i) = kernel(i, i) + self%kernel_jitter
+            matrix(i, i) = matrix(i, i) + self%kernel_jitter
         end do
-        call self%factor%factorize(kernel, status)
+        call self%factor%factorize(matrix, status)
         if (.not. status_ok(status)) return
         self%fitted = .true.
     end subroutine
@@ -160,7 +220,7 @@ contains
         type(fortnum_status_t), intent(out) :: status
         real(dp), allocatable :: z(:, :), kernel(:, :)
         if (.not. standardize(self, x, z, status)) return
-        call rbf_covariance(z, self%centres, 1.0_dp, self%lengths, kernel, status)
+        call covariance(self, z, self%centres, 1.0_dp, self%lengths, kernel, status)
         if (.not. status_ok(status)) return
         call whiten(self, kernel, phi, status)
     end subroutine
@@ -182,7 +242,7 @@ contains
         end do
         allocate(dc(size(self%centres, 1), size(self%centres, 2)), source=0.0_dp)
         allocate(dl(size(self%lengths)), source=0.0_dp)
-        call rbf_covariance_jvp(z, self%centres, 1.0_dp, self%lengths, &
+        call covariance_jvp(self, z, self%centres, 1.0_dp, self%lengths, &
             dz, dc, 0.0_dp, dl, kernel, status)
         if (.not. status_ok(status)) return
         call whiten(self, kernel, dphi, status)

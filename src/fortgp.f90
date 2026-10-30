@@ -24,6 +24,8 @@ module fortgp
         procedure :: log_marginal_likelihood_jvp
     end type exact_gp_t
     public :: rbf_covariance, rbf_covariance_jvp
+    public :: matern32_covariance, matern32_covariance_jvp
+    public :: matern52_covariance, matern52_covariance_jvp
 
     interface
         pure subroutine fortgp_rbf_leaf(amplitude, distance, value, &
@@ -32,6 +34,18 @@ module fortgp
             real(dp), intent(in) :: amplitude, distance
             real(dp), intent(out) :: value, damplitude, ddistance
         end subroutine fortgp_rbf_leaf
+        pure subroutine fortgp_matern32_leaf(amplitude, distance, value, &
+                damplitude, ddistance)
+            import dp
+            real(dp), intent(in) :: amplitude, distance
+            real(dp), intent(out) :: value, damplitude, ddistance
+        end subroutine fortgp_matern32_leaf
+        pure subroutine fortgp_matern52_leaf(amplitude, distance, value, &
+                damplitude, ddistance)
+            import dp
+            real(dp), intent(in) :: amplitude, distance
+            real(dp), intent(out) :: value, damplitude, ddistance
+        end subroutine fortgp_matern52_leaf
         pure subroutine fortgp_distance_leaf(x, y, length, value, dx, dy, dlength)
             import dp
             real(dp), intent(in) :: x, y, length
@@ -133,6 +147,148 @@ contains
         end if
         call status_set(status, FORTNUM_OK, '')
     end subroutine rbf_covariance_jvp
+
+    subroutine matern32_covariance(x, z, amplitude, length, covariance, status)
+        real(dp), intent(in) :: x(:, :), z(:, :), amplitude, length(:)
+        real(dp), allocatable, intent(out) :: covariance(:, :)
+        type(fortnum_status_t), intent(out) :: status
+        real(dp) :: distance, term, dx, dy, dl, da, dq
+        integer :: i, j, d
+        if (.not. valid_inputs(x, amplitude, length, status)) return
+        if (.not. valid_inputs(z, amplitude, length, status)) return
+        allocate (covariance(size(x, 2), size(z, 2)))
+        !$omp parallel do collapse(2) private(distance,term,dx,dy,dl,da,dq,d)
+        do j = 1, size(z, 2)
+            do i = 1, size(x, 2)
+                distance = 0.0_dp
+                do d = 1, size(x, 1)
+                    call fortgp_distance_leaf(x(d, i), z(d, j), length(d), &
+                        term, dx, dy, dl)
+                    distance = distance + term
+                end do
+                call fortgp_matern32_leaf(amplitude, sqrt(distance), covariance(i, j), da, dq)
+            end do
+        end do
+        !$omp end parallel do
+        if (.not. all(ieee_is_finite(covariance))) then
+            deallocate (covariance)
+            call invalid(status, 'kernel evaluation overflow or invalid arithmetic')
+        end if
+    end subroutine matern32_covariance
+
+    subroutine matern32_covariance_jvp(x, z, amplitude, length, dx, dz, &
+            damplitude, dlength, dcovariance, status)
+        real(dp), intent(in) :: x(:, :), z(:, :), amplitude, length(:)
+        real(dp), intent(in) :: dx(:, :), dz(:, :), damplitude, dlength(:)
+        real(dp), allocatable, intent(out) :: dcovariance(:, :)
+        type(fortnum_status_t), intent(out) :: status
+        real(dp) :: distance, ddistance, term, gx, gz, gl, ga, gq, value
+        integer :: i, j, d
+        if (.not. valid_inputs(x, amplitude, length, status)) return
+        if (.not. valid_inputs(z, amplitude, length, status)) return
+        call invalid(status, 'kernel tangent shapes differ from primal shapes')
+        if (any(shape(dx) /= shape(x)) .or. any(shape(dz) /= shape(z))) return
+        if (size(dlength) /= size(length)) return
+        call invalid(status, 'kernel tangents must be finite')
+        if (.not. all(ieee_is_finite(dx))) return
+        if (.not. all(ieee_is_finite(dz))) return
+        if (.not. all(ieee_is_finite(dlength))) return
+        if (.not. ieee_is_finite(damplitude)) return
+        allocate (dcovariance(size(x, 2), size(z, 2)))
+        !$omp parallel do collapse(2) private(distance,ddistance,term,gx,gz,gl,ga,gq,value,d)
+        do j = 1, size(z, 2)
+            do i = 1, size(x, 2)
+                distance = 0.0_dp
+                ddistance = 0.0_dp
+                do d = 1, size(x, 1)
+                    call fortgp_distance_leaf(x(d, i), z(d, j), length(d), &
+                        term, gx, gz, gl)
+                    distance = distance + term
+                    ddistance = ddistance + gx*dx(d, i) + gz*dz(d, j) + gl*dlength(d)
+                end do
+                call fortgp_matern32_leaf(amplitude, sqrt(distance), value, ga, gq)
+                dcovariance(i, j) = ga*damplitude + gq*ddistance
+            end do
+        end do
+        !$omp end parallel do
+        if (.not. all(ieee_is_finite(dcovariance))) then
+            deallocate (dcovariance)
+            call invalid(status, 'kernel tangent evaluation overflow')
+            return
+        end if
+        call status_set(status, FORTNUM_OK, '')
+    end subroutine matern32_covariance_jvp
+
+    subroutine matern52_covariance(x, z, amplitude, length, covariance, status)
+        real(dp), intent(in) :: x(:, :), z(:, :), amplitude, length(:)
+        real(dp), allocatable, intent(out) :: covariance(:, :)
+        type(fortnum_status_t), intent(out) :: status
+        real(dp) :: distance, term, dx, dy, dl, da, dq
+        integer :: i, j, d
+        if (.not. valid_inputs(x, amplitude, length, status)) return
+        if (.not. valid_inputs(z, amplitude, length, status)) return
+        allocate (covariance(size(x, 2), size(z, 2)))
+        !$omp parallel do collapse(2) private(distance,term,dx,dy,dl,da,dq,d)
+        do j = 1, size(z, 2)
+            do i = 1, size(x, 2)
+                distance = 0.0_dp
+                do d = 1, size(x, 1)
+                    call fortgp_distance_leaf(x(d, i), z(d, j), length(d), &
+                        term, dx, dy, dl)
+                    distance = distance + term
+                end do
+                call fortgp_matern52_leaf(amplitude, sqrt(distance), covariance(i, j), da, dq)
+            end do
+        end do
+        !$omp end parallel do
+        if (.not. all(ieee_is_finite(covariance))) then
+            deallocate (covariance)
+            call invalid(status, 'kernel evaluation overflow or invalid arithmetic')
+        end if
+    end subroutine matern52_covariance
+
+    subroutine matern52_covariance_jvp(x, z, amplitude, length, dx, dz, &
+            damplitude, dlength, dcovariance, status)
+        real(dp), intent(in) :: x(:, :), z(:, :), amplitude, length(:)
+        real(dp), intent(in) :: dx(:, :), dz(:, :), damplitude, dlength(:)
+        real(dp), allocatable, intent(out) :: dcovariance(:, :)
+        type(fortnum_status_t), intent(out) :: status
+        real(dp) :: distance, ddistance, term, gx, gz, gl, ga, gq, value
+        integer :: i, j, d
+        if (.not. valid_inputs(x, amplitude, length, status)) return
+        if (.not. valid_inputs(z, amplitude, length, status)) return
+        call invalid(status, 'kernel tangent shapes differ from primal shapes')
+        if (any(shape(dx) /= shape(x)) .or. any(shape(dz) /= shape(z))) return
+        if (size(dlength) /= size(length)) return
+        call invalid(status, 'kernel tangents must be finite')
+        if (.not. all(ieee_is_finite(dx))) return
+        if (.not. all(ieee_is_finite(dz))) return
+        if (.not. all(ieee_is_finite(dlength))) return
+        if (.not. ieee_is_finite(damplitude)) return
+        allocate (dcovariance(size(x, 2), size(z, 2)))
+        !$omp parallel do collapse(2) private(distance,ddistance,term,gx,gz,gl,ga,gq,value,d)
+        do j = 1, size(z, 2)
+            do i = 1, size(x, 2)
+                distance = 0.0_dp
+                ddistance = 0.0_dp
+                do d = 1, size(x, 1)
+                    call fortgp_distance_leaf(x(d, i), z(d, j), length(d), &
+                        term, gx, gz, gl)
+                    distance = distance + term
+                    ddistance = ddistance + gx*dx(d, i) + gz*dz(d, j) + gl*dlength(d)
+                end do
+                call fortgp_matern52_leaf(amplitude, sqrt(distance), value, ga, gq)
+                dcovariance(i, j) = ga*damplitude + gq*ddistance
+            end do
+        end do
+        !$omp end parallel do
+        if (.not. all(ieee_is_finite(dcovariance))) then
+            deallocate (dcovariance)
+            call invalid(status, 'kernel tangent evaluation overflow')
+            return
+        end if
+        call status_set(status, FORTNUM_OK, '')
+    end subroutine matern52_covariance_jvp
 
     subroutine fit(self, x, y, noise_cov, amplitude, length, status)
         class(exact_gp_t), intent(inout) :: self
