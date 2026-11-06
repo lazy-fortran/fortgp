@@ -11,9 +11,10 @@ program generate
     use fortsym_kernel_emit, only: kernel_emit_spec_t, emit_fortran_kernel_ir, &
         emit_cuda_device_ir
     use fortsym_kernel_ir, only: kernel_ir_t, lower_kernel_ir
-    use fortsym_string, only: chars, str, str_t
+    use fortsym_string, only: chars, str, str_t, words
+    use fortsym_context, only: current_arena
     implicit none
-    type(arena_t), target :: arena
+    type(arena_t), pointer :: arena
     type(native_engine_t) :: engine
     type(expr_t) :: a, q, x, y, ell, value, r, c, stable
     type(expr_t), allocatable :: roots(:)
@@ -25,43 +26,43 @@ program generate
     integer :: i, unit, leaf
     logical :: ok
 
-    call arena%init()
-    engine = make_native_engine(arena)
+    arena => current_arena()
+    engine = make_native_engine()
     do leaf = 1, 4
         if (leaf == 1) then
-            a = sym(arena, 'amplitude')
-            q = sym(arena, 'distance')
+            a = sym('amplitude')
+            q = sym('distance')
             value = a**2*exp_expr(-0.5_dp*q)
             roots = [value, diff(value, a), diff(value, q)]
             spec%name = str('fortgp_rbf_leaf')
-            spec%args = [str('amplitude'), str('distance')]
-            spec%outputs = [str('value'), str('damplitude'), str('ddistance')]
+            spec%args = words('amplitude distance')
+            spec%outputs = words('value damplitude ddistance')
         else if (leaf >= 3) then
-            a = sym(arena, 'amplitude')
-            r = sym(arena, 'radius')
+            a = sym('amplitude')
+            r = sym('radius')
             if (leaf == 3) then
-                c = sqrt_expr(num(arena, 3))
-                value = a**2*(num(arena, 1) + c*r)*exp_expr(-c*r)
+                c = sqrt_expr(num(3))
+                value = a**2*(num(1) + c*r)*exp_expr(-c*r)
                 spec%name = str('fortgp_matern32_leaf')
             else
-                c = sqrt_expr(num(arena, 5))
-                value = a**2*(num(arena, 1) + c*r + &
-                    (num(arena, 5)/num(arena, 3))*r**2)*exp_expr(-c*r)
+                c = sqrt_expr(num(5))
+                value = a**2*(num(1) + c*r + &
+                    (num(5)/num(3))*r**2)*exp_expr(-c*r)
                 spec%name = str('fortgp_matern52_leaf')
             end if
             ! Cancel the radius before emission to extend dK/d(r**2) to r=0.
-            roots = [value, diff(value, a), diff(value, r)/(num(arena, 2)*r)]
-            spec%args = [str('amplitude'), str('radius')]
-            spec%outputs = [str('value'), str('damplitude'), str('ddistance')]
+            roots = [value, diff(value, a), diff(value, r)/(num(2)*r)]
+            spec%args = words('amplitude radius')
+            spec%outputs = words('value damplitude ddistance')
         else
-            x = sym(arena, 'x')
-            y = sym(arena, 'y')
-            ell = sym(arena, 'length')
+            x = sym('x')
+            y = sym('y')
+            ell = sym('length')
             value = ((x - y)/ell)**2
             roots = [value, diff(value, x), diff(value, y), diff(value, ell)]
             spec%name = str('fortgp_distance_leaf')
-            spec%args = [str('x'), str('y'), str('length')]
-            spec%outputs = [str('value'), str('dx'), str('dy'), str('dlength')]
+            spec%args = words('x y length')
+            spec%outputs = words('value dx dy dlength')
         end if
         do i = 1, size(roots)
             if (leaf >= 3 .and. i == 3) then
@@ -80,7 +81,7 @@ program generate
         call lower_kernel_ir(roots, ir, ok, message)
         if (.not. ok) error stop message
         spec%generator = str('fortgp/gen/generate.f90')
-        spec%generator_revision = str('fortsym 45ea8959002eedc8a85bb2dc386af293bb66a761')
+        spec%generator_revision = str('fortsym b9ea95c5a0475b016b1e149875a9bec9d8562533')
         spec%regenerate_command = str('cd gen && fpm run generate')
         spec%temp_prefix = str('t')
         spec%pure_procedure = .true.
