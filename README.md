@@ -152,6 +152,14 @@ OpenMP. Run the synthetic benchmark with
 library's thread count fixed to one, to compare one and four OpenMP threads
 and numerical agreement.
 
+## CMake
+
+`fo build` and `fo test` use `fpm.toml`. CMake consumers use
+`FetchContent_Declare(fortgp ...)`, `FetchContent_MakeAvailable(fortgp)` and
+link the `fortgp` target. Existing `fortinfer` and `fortnum` targets are
+reused; otherwise the pinned fortinfer is fetched.
+`-DFORTGP_BUILD_TESTING=ON` registers the tests with CTest.
+
 ## Multifidelity
 
 `fortgp_multifidelity` (deterministic cheap-code correction), `fortgp_ar1`
