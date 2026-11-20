@@ -16,7 +16,7 @@ program generate
     implicit none
     type(arena_t), pointer :: arena
     type(native_engine_t) :: engine
-    type(expr_t) :: a, q, x, y, ell, value, r, c, stable
+    type(expr_t) :: a, q, x, y, ell, value, r, c, stable, rho, low, correction
     type(expr_t), allocatable :: roots(:)
     type(engine_result_t) :: reduced
     type(kernel_ir_t) :: ir
@@ -28,7 +28,7 @@ program generate
 
     arena => current_arena()
     engine = make_native_engine()
-    do leaf = 1, 4
+    do leaf = 1, 5
         if (leaf == 1) then
             a = sym('amplitude')
             q = sym('distance')
@@ -37,7 +37,7 @@ program generate
             spec%name = str('fortgp_rbf_leaf')
             spec%args = words('amplitude distance')
             spec%outputs = words('value damplitude ddistance')
-        else if (leaf >= 3) then
+        else if (leaf == 3 .or. leaf == 4) then
             a = sym('amplitude')
             r = sym('radius')
             if (leaf == 3) then
@@ -54,6 +54,16 @@ program generate
             roots = [value, diff(value, a), diff(value, r)/(num(2)*r)]
             spec%args = words('amplitude radius')
             spec%outputs = words('value damplitude ddistance')
+        else if (leaf == 5) then
+            rho = sym('rho')
+            low = sym('low')
+            correction = sym('correction')
+            value = rho*low + correction
+            roots = [value, diff(value, rho), diff(value, low), &
+                diff(value, correction)]
+            spec%name = str('fortgp_autoregressive_leaf')
+            spec%args = words('rho low correction')
+            spec%outputs = words('value drho dlow dcorrection')
         else
             x = sym('x')
             y = sym('y')
@@ -65,7 +75,7 @@ program generate
             spec%outputs = words('value dx dy dlength')
         end if
         do i = 1, size(roots)
-            if (leaf >= 3 .and. i == 3) then
+            if ((leaf == 3 .or. leaf == 4) .and. i == 3) then
                 reduced = engine%expand(roots(i))
                 if (.not. reduced%ok) error stop 'FortSym expansion failed'
                 roots(i) = reduced%value

@@ -4,7 +4,7 @@ module fortgp
     use fortnum_status, only: fortnum_status_t, status_set, status_ok, &
         FORTNUM_DOMAIN_ERROR, FORTNUM_OK
     use fortnum_cholesky, only: cholesky_factorization_t
-    use fortprob_gaussian, only: gaussian_conditioner_t, gaussian_condition_jvp, &
+    use fortinfer_gaussian, only: gaussian_conditioner_t, gaussian_condition_jvp, &
         gaussian_logpdf, validate_covariance
     implicit none
     private

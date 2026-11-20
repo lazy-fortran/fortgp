@@ -1,7 +1,7 @@
 program gaussian_update_curve
     use, intrinsic :: iso_fortran_env, only: dp => real64
     use fortgp, only: exact_gp_t
-    use fortprob_gaussian, only: gaussian_logpdf
+    use fortinfer_gaussian, only: gaussian_logpdf
     use fortnum_status, only: fortnum_status_t, status_ok
     implicit none
     integer, parameter :: n = 1201

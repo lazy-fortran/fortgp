@@ -37,7 +37,7 @@ indefinite noise covariance, and a training covariance that cannot be
 factorized as positive definite. Zero noise is allowed when the resulting
 training covariance is positive definite. Covariance validation permits only
 roundoff-scale symmetry/eigenvalue discrepancies as documented in
-[fortprob](https://github.com/lazy-fortran/fortprob); it does not clip eigenvalues.
+[fortinfer](https://github.com/lazy-fortran/fortinfer); it does not clip eigenvalues.
 There is no hidden jitter or variance clipping. A failed refit invalidates the
 previous fit. Callers must inspect the returned `fortnum_status_t` before using
 results.
@@ -75,7 +75,7 @@ problems.
 Run `fpm test` for independent scalar/correlated-noise known answers, derivative
 finite differences and invalid-input checks. The normal library build needs
 no computer algebra runtime. Dependencies are pinned: fortgp uses
-[fortprob](https://github.com/lazy-fortran/fortprob), which uses
+[fortinfer](https://github.com/lazy-fortran/fortinfer), which uses
 [fortnum](https://github.com/lazy-fortran/fortnum) for numerical primitives.
 
 Pointwise covariance and derivative leaves are generated from the specification
@@ -151,3 +151,12 @@ OpenMP. Run the synthetic benchmark with
 `cd benchmark/basis && fpm run --profile release basis`, with the linear algebra
 library's thread count fixed to one, to compare one and four OpenMP threads
 and numerical agreement.
+
+## Multifidelity
+
+`fortgp_multifidelity` (deterministic cheap-code correction), `fortgp_ar1`
+(noisy two-level AR(1) conditioning, Kennedy and O'Hagan 2000, Le Gratiet and
+Garnier 2014) and `fortgp_gaussian_constraints` (Brownian factors and
+protected-subspace constraints) are described in
+[docs/multifidelity.md](docs/multifidelity.md).
+
