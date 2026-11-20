@@ -162,7 +162,7 @@ reused; otherwise the pinned fortinfer is fetched.
 
 ## Multifidelity
 
-`fortgp_multifidelity` (deterministic cheap-code correction), `fortgp_ar1`
+`fortgp_multifidelity` (deterministic cheap-code correction and the generated scalar `autoregressive` value with its derivatives), `fortgp_ar1`
 (noisy two-level AR(1) conditioning, Kennedy and O'Hagan 2000, Le Gratiet and
 Garnier 2014) and `fortgp_gaussian_constraints` (Brownian factors and
 protected-subspace constraints) are described in

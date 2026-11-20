@@ -5,6 +5,7 @@ module fortgp_multifidelity
     use fortnum_lapack_chol, only: dpotrf => fortnum_dpotrf, dpotrs => fortnum_dpotrs
     implicit none
     private
+    public :: autoregressive
     interface
         pure subroutine fortgp_distance_leaf(x, y, length, value, dx, dy, dlength)
             import dp
@@ -35,6 +36,15 @@ module fortgp_multifidelity
         procedure :: vjp => gp_vjp
     end type
 contains
+    pure subroutine autoregressive(rho, low, correction, value, drho, dlow, &
+            dcorrection)
+        !! value = rho low + correction and its partial derivatives.
+        real(dp), intent(in) :: rho, low, correction
+        real(dp), intent(out) :: value, drho, dlow, dcorrection
+        call fortgp_autoregressive_leaf(rho, low, correction, value, drho, dlow, &
+                                        dcorrection)
+    end subroutine autoregressive
+
     subroutine gp_fit(self, x, low, high, length, amplitude, rho, nugget, status)
         class(autoregressive_gp_t), intent(inout) :: self
         real(dp), intent(in) :: x(:, :), low(:, :), high(:, :), length(:)

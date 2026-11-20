@@ -1,6 +1,6 @@
 program test_multifidelity
     use, intrinsic :: iso_fortran_env, only: dp => real64
-    use fortgp_multifidelity, only: autoregressive_gp_t
+    use fortgp_multifidelity, only: autoregressive_gp_t, autoregressive
     use fortnum_status, only: fortnum_status_t
     implicit none
     type(autoregressive_gp_t) :: gp
@@ -12,6 +12,7 @@ program test_multifidelity
     call noisy_ar1()
     call dense_ar1()
     call single_site()
+    call autoregressive_leaf()
     call parallel_control()
     do i = 1, n
         x(1, i) = -2 + 4*real(i - 1, dp)/(n - 1)
@@ -253,6 +254,14 @@ contains
         call require(maxval(abs(prediction-matmul(transpose(full_cross),rhs(:,1)))) &
             < 2.e-14_dp, 'single GP posterior mean')
     end subroutine
+
+    subroutine autoregressive_leaf()
+        real(dp) :: value, drho, dlow, dcorrection
+        call autoregressive(1.3_dp, -0.4_dp, 0.25_dp, value, drho, dlow, dcorrection)
+        call require(abs(value - (1.3_dp*(-0.4_dp) + 0.25_dp)) < 1.e-15_dp, 'AR value')
+        call require(drho == -0.4_dp .and. dlow == 1.3_dp .and. dcorrection == 1, &
+            'AR derivatives')
+    end subroutine autoregressive_leaf
 
     subroutine single_site()
         type(autoregressive_gp_t) :: control
