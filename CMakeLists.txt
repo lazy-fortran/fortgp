@@ -14,7 +14,8 @@ if(NOT TARGET fortinfer)
         GIT_TAG ${FORTGP_FORTINFER_TAG})
     FetchContent_MakeAvailable(fortinfer)
 endif()
-find_package(OpenMP REQUIRED COMPONENTS Fortran)
+# OpenMP parallelizes covariance assembly when the compiler supports it.
+find_package(OpenMP COMPONENTS Fortran)
 
 add_library(fortgp STATIC
     src/generated/fortgp_autoregressive_leaf.f90
@@ -32,7 +33,10 @@ set_target_properties(fortgp PROPERTIES
     Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod)
 target_include_directories(fortgp PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/mod>)
-target_link_libraries(fortgp PUBLIC fortinfer fortnum OpenMP::OpenMP_Fortran)
+target_link_libraries(fortgp PUBLIC fortinfer fortnum)
+if(OpenMP_Fortran_FOUND)
+    target_link_libraries(fortgp PUBLIC OpenMP::OpenMP_Fortran)
+endif()
 
 if(FORTGP_BUILD_TESTING)
     include(CTest)
